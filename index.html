@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D VR Experience - College Campus</title>
+    <meta name="description" content="Interactive 3D VR tour of college campus using A-Frame">
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+
+    <style>
+        #tourBtn {
+            position: fixed;
+            bottom: 32px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            background: linear-gradient(135deg, #B8860B, #FFD700, #B8860B);
+            color: #1a1a2e;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 17px;
+            font-weight: 800;
+            padding: 14px 36px;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 6px 28px rgba(184, 134, 11, 0.55);
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+
+        #tourBtn:hover {
+            transform: translateX(-50%) scale(1.06);
+            box-shadow: 0 10px 36px rgba(255, 215, 0, 0.7);
+        }
+
+        #tourBtn:disabled {
+            background: linear-gradient(135deg, #555, #888);
+            color: #ccc;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        #tourLabel {
+            position: fixed;
+            top: 18px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            background: rgba(26, 26, 46, 0.88);
+            color: #FFD700;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 7px 22px;
+            border-radius: 30px;
+            border: 1.5px solid #B8860B;
+            pointer-events: none;
+        }
+    </style>
+
+    <script>
+        /* ═══════════════════════════════════════════════════════════════════
+           BOUNDARY CHECK  –  handles all zones including stairs + upper floor
+        ═══════════════════════════════════════════════════════════════════ */
+        AFRAME.registerComponent('boundary-check', {
+            tick: function () {
+                if (window._tourAutoMove) return;   /* camera controlled by tour animation */
+                var el = this.el;
+                var pos = el.getAttribute('position');
+                var m = 0.5;
+
+                /* ── Zone flags ─────────────────────────────────────────── */
+                var inMain = pos.x >= -5 && pos.x <= 5 && pos.z >= -5 && pos.z <= 6.5;
+                var inRCor = pos.x > 5 && pos.x <= 19 && pos.z >= -10 && pos.z <= 0;
+                var inLCor = pos.x >= -19 && pos.x < -5 && pos.z >= -10 && pos.z <= 0;
+                /* Stair zone: right corner x:2->4.5, z:-1->-5 (x>4.5 free for corridor) */
+                var inStair = pos.x >= 2 && pos.x <= 4.5 && pos.z <= -1 && pos.z >= -5;
+                /* Upper floor: z −5 → −22, floor at y=2.4 */
+                var inUpper = pos.x >= -7 && pos.x <= 7 && pos.z <= -5 && pos.z >= -22 && pos.y > 2.8;
+
+                /* ── 1. UPPER FLOOR ─────────────────────────────────────── */
+                if (inUpper) {
+                    var eyeUpper = 2.4 + 1.6;               // floor 2.4 + eye 1.6
+                    if (pos.y < eyeUpper - 0.05) pos.y = eyeUpper;
+                    if (pos.x < -7 + m) pos.x = -7 + m;
+                    if (pos.x > 7 - m) pos.x = 7 - m;
+                    if (pos.z < -22 + m) pos.z = -22 + m;
+                    el.setAttribute('position', pos); return;
+                }
+
+                /* ── 2. STAIR ZONE  (auto-climb) ────────────────────────── */
+                if (inStair) {
+                    /* progress 0 (at z=-1) -> 1 (at z=-5) */
+                    var prog = Math.min(Math.max((-pos.z - 1) / 4, 0), 1);
+                    pos.y = 1.6 + prog * 2.4;               // y: 1.6 → 4.0
+                    if (pos.x < -2.5 + m) pos.x = -2.5 + m;
+                    if (pos.x > 2.5 - m) pos.x = 2.5 - m;
+                    el.setAttribute('position', pos); return;
+                }
+
+                /* ── 3. MAIN ROOM ────────────────────────────────────────── */
+                if (inMain) {
+                    /* Front wall (z=−5) — blocked except stair opening (x −2.5→2.5)  */
+                    if (pos.z < -5 + m && !(pos.x >= -2.5 && pos.x <= 2.5)) pos.z = -5 + m;
+                    if (pos.x < -5 + m && pos.z > 0) pos.x = -5 + m;
+                    if (pos.x > 5 - m && pos.z > 0) pos.x = 5 - m;
+                    el.setAttribute('position', pos); return;
+                }
+
+                /* ── 4. RIGHT CORRIDOR ───────────────────────────────────── */
+                if (inRCor) {
+                    if (pos.z < -5 + m) pos.z = -5 + m;
+                    if (pos.z > 0 - m) pos.z = 0 - m;
+                    if (pos.x > 19 - m) pos.x = 19 - m;
+                    el.setAttribute('position', pos); return;
+                }
+
+                /* ── 5. LEFT CORRIDOR ────────────────────────────────────── */
+                if (inLCor) {
+                    if (pos.z < -5 + m) pos.z = -5 + m;
+                    if (pos.z > 0 - m) pos.z = 0 - m;
+                    if (pos.x < -19 + m) pos.x = -19 + m;
+                    el.setAttribute('position', pos); return;
+                }
+
+                /* ── Fallback ─────────────────────────────────────────────── */
+                if (pos.x > 19 - m) pos.x = 19 - m;
+                if (pos.x < -19 + m) pos.x = -19 + m;
+                el.setAttribute('position', pos);
+            }
+        });
+    </script>
+</head>
+
+<body>
+
+    <div id="tourLabel">🏫 College Campus VR Tour</div>
+    <button id="tourBtn" onclick="startTour()">🚪 Walk to Sai Prasad Room</button>
+
+    <a-scene>
+
+        <!-- ======= ASSETS ======= -->
+        <a-assets>
+            <img id="outside-gate" src="images/outside_main gate.jpeg" alt="Outside Gate">
+            <img id="inside-gate" src="images/inside_main gate.jpeg" alt="Inside Gate">
+            <img id="gate-left-wall" src="images/maingate_leftwall.jpeg" alt="Gate Left Wall">
+            <img id="gate-right-wall" src="images/maingate_rightwall.jpeg" alt="Gate Right Wall">
+            <img id="front" src="images/inside_front_view.jpeg" alt="Front Wall">
+            <img id="left" src="images/inside_left_view.jpeg" alt="Left Wall">
+            <img id="right" src="images/inside_right_view.jpeg" alt="Right Wall">
+            <img id="floor" src="images/floor.jpeg" alt="Floor">
+            <img id="ceiling" src="images/ceiling.jpeg" alt="Ceiling">
+            <img id="cor-ceiling" src="images/ceiling of coridorr.jpeg" alt="Corridor Ceiling">
+            <img id="rc-left" src="images/rightside_coridor_leftwall.jpeg" alt="RC Left Wall">
+            <img id="rc-right" src="images/rightside_coridor_right_wall.jpeg" alt="RC Right Wall">
+            <img id="lc-left" src="images/leftside_coridor_leftwall.jpeg" alt="LC Left Wall">
+            <img id="lc-right" src="images/leftside_coridor_rightwall.jpeg" alt="LC Right Wall">
+        </a-assets>
+
+        <!-- ======= CAMERA ======= -->
+        <a-camera id="mainCam" position="0 1.6 7" wasd-controls look-controls boundary-check>
+            <a-cursor color="#FFD700" fuse="false"></a-cursor>
+        </a-camera>
+
+        <!-- ======= LIGHTING ======= -->
+        <a-light type="ambient" color="#fff" intensity="0.9"></a-light>
+        <a-light type="point" color="#FFF8DC" intensity="0.7" position="0 4 0"></a-light>
+        <a-light type="point" color="#FFE4B5" intensity="0.5" position="0 3 -3"></a-light>
+        <a-light type="point" color="#FFF8DC" intensity="0.6" position="12 4 -5"></a-light>
+        <a-light type="point" color="#FFF8DC" intensity="0.6" position="-12 4 -5"></a-light>
+        <!-- Upper floor light -->
+        <a-light type="point" color="#FFF8DC" intensity="0.7" position="0 5.5 -15"></a-light>
+
+
+        <!-- ====================================================================
+             MAIN ROOM  x:−5→+5  z:−5→+5
+        ==================================================================== -->
+
+        <!-- Main room floor -->
+        <a-plane src="#floor" position="0 0 0" rotation="-90 0 0" width="10" height="10"
+            material="roughness:0.8"></a-plane>
+        <a-plane src="#ceiling" position="0 5 0" rotation=" 90 0 0" width="10" height="10"
+            material="roughness:0.9"></a-plane>
+
+        <!-- Front wall (original – single full plane) -->
+        <a-plane src="#front" position="0 2.5 -5" width="10" height="5" material="side:double"></a-plane>
+
+        <!-- Gate walls -->
+        <a-plane src="#outside-gate" position="0 2.5 5.01" width="10" height="5" material="side:double"></a-plane>
+        <a-plane src="#inside-gate" position="0 2.5 5" width="10" height="5" material="side:double"></a-plane>
+        <a-plane src="#gate-right-wall" position="-10 2.5 5.01" width="10" height="5" material="side:double"></a-plane>
+        <a-plane src="#gate-left-wall" position=" 10 2.5 5.01" width="10" height="5" material="side:double"></a-plane>
+
+        <!-- Side walls -->
+        <a-plane src="#left" position="-5 2.5 2.5" rotation="0  90 0" width="5" height="5"
+            material="side:double"></a-plane>
+        <a-plane src="#right" position=" 5 2.5 2.5" rotation="0 -90 0" width="5" height="5"
+            material="side:double"></a-plane>
+
+
+        <!-- Stairs: wide (2.5) in right corner, colour #2B1B0E -->
+        <a-entity id="stairs">
+            <a-box position="3.5 0.2  -1.3" width="2.5" height="0.4" depth="0.6" color="#2B1B0E"></a-box>
+            <a-box position="3.5 0.6  -1.9" width="2.5" height="0.4" depth="0.6" color="#2B1B0E"></a-box>
+            <a-box position="3.5 1.0  -2.5" width="2.5" height="0.4" depth="0.6" color="#2B1B0E"></a-box>
+            <a-box position="3.5 1.4  -3.1" width="2.5" height="0.4" depth="0.6" color="#2B1B0E"></a-box>
+            <a-box position="3.5 1.8  -3.7" width="2.5" height="0.4" depth="0.6" color="#2B1B0E"></a-box>
+            <a-box position="3.5 2.2  -4.3" width="2.5" height="0.4" depth="0.6" color="#2B1B0E"></a-box>
+        </a-entity>
+
+
+        <!-- ====================================================================
+             UPPER FLOOR  –  floor at y=2.4  |  x:−5→+5  z:−5→−22
+             Ceiling at y=7.4  (5 units tall)
+        ==================================================================== -->
+        <a-entity id="upper-floor">
+
+            <!-- Floor (runs full length z=-5 to -22, centred at z=-13.5) -->
+            <a-plane position="0 2.4 -13.5" rotation="-90 0 0" width="10" height="17" src="#floor"
+                material="roughness:0.8">
+            </a-plane>
+
+            <!-- Ceiling -->
+            <a-plane position="0 7.4 -13.5" rotation=" 90 0 0" width="10" height="17" src="#ceiling"
+                material="roughness:0.9">
+            </a-plane>
+
+            <!-- Far end wall (z=−22) -->
+            <a-plane position="0 4.9 -22" width="10" height="5" color="#D9C9A8" material="side:double">
+            </a-plane>
+
+            <!-- Left side wall (x=−5, z=−5 to −22) -->
+            <a-plane position="-5 4.9 -13.5" rotation="0  90 0" width="17" height="5" color="#D9C9A8"
+                material="side:double">
+            </a-plane>
+
+            <!-- Right side wall (x=+5, z=−5 to −22) -->
+            <a-plane position=" 5 4.9 -13.5" rotation="0 -90 0" width="17" height="5" color="#D9C9A8"
+                material="side:double">
+            </a-plane>
+
+
+
+            <!-- Upper-floor entry seal: fills gap between main ceiling (y=5) and upper ceiling (y=7.4) at z=-5 -->
+            <!-- Left section (x=-5 to +2, avoids stair opening x=2→5) -->
+            <a-plane position="-1.5 6.2 -5" width="7" height="2.4" color="#D9C9A8" material="side:double"></a-plane>
+            <!-- Right section sealed (stairs are against right wall x=2→5, no walkthrough gap needed at ceiling level) -->
+            <a-plane position="3.5 6.2 -5" width="3" height="2.4" color="#D9C9A8" material="side:double"></a-plane>
+
+            <!-- "First Floor" sign -->
+            <a-plane position="0 6.6 -5.06" width="3.5" height="0.65" color="#1a1a2e" material="shader:flat">
+                <a-text value="★ First Floor" align="center" color="#FFD700" width="5" position="0 0 0.02">
+                </a-text>
+            </a-plane>
+
+        </a-entity>
+
+
+
+        <!-- ====================================================================
+             COLORED FLOOR PATHS  (hidden until button click)
+        ==================================================================== -->
+
+        <!-- 🔴 Forward: gate entrance (z=5.5) → left-turn junction (z=-3) -->
+        <a-plane id="path1" color="#FF3333" position="0 0.05 1.25" rotation="-90 0 0" width="0.9" height="8.5"
+            material="shader:flat; opacity:0.92" visible="false">
+        </a-plane>
+
+        <!-- 🟢 Left turn: hall → corridor entrance -->
+        <a-plane id="path2" color="#33FF66" position="-2.5 0.05 -3" rotation="-90 0 0" width="5" height="0.9"
+            material="shader:flat; opacity:0.92" visible="false">
+        </a-plane>
+
+        <!-- 🔵 Corridor run: x=-5 to x=-12 staying in front section z=-2.5 -->
+        <a-plane id="path3" color="#3399FF" position="-8.5 0.05 -2.5" rotation="-90 0 0" width="7" height="0.9"
+            material="shader:flat; opacity:0.92" visible="false">
+        </a-plane>
+
+        <!-- 🟣 Walk toward cabin wall: approaching z=-5 at x=-12 -->
+        <a-plane id="path4" color="#CC44FF" position="-12 0.05 -3.75" rotation="-90 0 0" width="0.9" height="2.5"
+            material="shader:flat; opacity:0.92" visible="false">
+        </a-plane>
+
+        <!-- ⭐ Destination marker: in front of Sai Prasad door in lc-right texture -->
+        <a-entity id="pathEnd" visible="false">
+            <a-cylinder position="-8 0.05 -2.5" radius="0.7" height="0.05" color="#FFD700"
+                material="shader:flat; opacity:0.95"></a-cylinder>
+            <a-text value="★ Sai Prasad Room" align="center" color="#FFD700" width="5" position="-8 0.6 -2.5"
+                rotation="0 90 0"></a-text>
+        </a-entity>
+
+
+        <!-- ====================================================================
+             RIGHT CORRIDOR  x:5→19  z:−10→0
+        ==================================================================== -->
+        <a-entity id="right-corridor">
+            <a-plane src="#floor" position="12 0 -5" rotation="-90 0 0" width="14" height="10"
+                material="roughness:0.8"></a-plane>
+            <a-plane src="#cor-ceiling" position="12 5 -5" rotation=" 90 0 0" width="14" height="10"
+                material="roughness:0.9"></a-plane>
+            <a-plane src="#rc-left" position="12 2.5 -10" rotation="0 180 0" width="14" height="5"
+                material="side:double"></a-plane>
+            <a-plane src="#rc-right" position="12 2.5   0" rotation="0 180 0" width="14" height="5"
+                material="side:double"></a-plane>
+            <a-plane src="#rc-right" position="19 2.5  -5" rotation="0  90 0" width="10" height="5"
+                material="side:double"></a-plane>
+        </a-entity>
+
+        <!-- ====================================================================
+             LEFT CORRIDOR  x:−19→−5  z:−10→0
+        ==================================================================== -->
+        <a-entity id="left-corridor">
+            <a-plane src="#floor" position="-12 0 -5" rotation="-90 0 0" width="14" height="10"
+                material="roughness:0.8"></a-plane>
+            <a-plane src="#cor-ceiling" position="-12 5 -5" rotation=" 90 0 0" width="14" height="10"
+                material="roughness:0.9"></a-plane>
+            <a-plane src="#lc-left" position="-12 2.5  0" rotation="0 180 0" width="14" height="5"
+                material="side:double"></a-plane>
+            <a-plane src="#lc-right" position="-12 2.5 -10" rotation="0 180 0" width="14" height="5"
+                material="side:double"></a-plane>
+            <a-plane src="#lc-left" position="-19 2.5 -5" rotation="0 -90 0" width="10" height="5"
+                material="side:double"></a-plane>
+        </a-entity>
+        <!-- Left corridor inner wall at z=-5 (solid, full width) -->
+        <a-plane src="#lc-right" position="-12 2.5 -5" rotation="0 0 0" width="14" height="5"
+            material="side:double"></a-plane>
+
+
+
+        <!-- Sai Prasad nameplate: floats in front of first door in lc-right texture (~x=-8) -->
+        <a-plane position="-8 3.8 -4.85" width="2.2" height="0.55" color="#1a1a2e" material="shader:flat; side:double">
+            <a-text value="Prof. Sai Prasad" align="center" color="#FFD700" width="3.8" position="0 0 0.02"></a-text>
+        </a-plane>
+
+
+        <a-sky color="#87CEEB"></a-sky>
+    </a-scene>
+
+    <script src="js/script.js"></script>
+
+    <script>
+        /* ══════════════════════════════════════════════════════════════
+           AUTO-WALK TOUR  –  camera follows path to Sai Prasad Room
+        ══════════════════════════════════════════════════════════════ */
+        var _tourRunning = false;
+        window._tourAutoMove = false;
+
+        /* Helpers */
+        function _lerp(a, b, t) { return a + (b - a) * t; }
+        function _ease(t) { return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; }
+
+        /*  Waypoints: [ timeMs, x, y, z, rotY ]
+            rotY: 0 = face -Z (forward into room)
+                  90 = face -X (left / into left corridor)
+        */
+        var TOUR_WP = [
+            [0, 0, 1.6, 5.0, 0],  // gate start, facing into room
+            [1400, 0, 1.6, -2.5, 0],  // walked to left-turn junction
+            [2200, 0, 1.6, -2.5, 90],  // turned left
+            [3000, -5, 1.6, -2.5, 90],  // at corridor opening
+            [4200, -8, 1.6, -2.5, 90],  // walked to first door position (x=-8)
+            [4900, -8, 1.6, -2.5, 0],  // turned to face right wall (lc-right texture)
+        ];
+
+        /* Path-segment reveal times (ms) */
+        var PATH_TIMES = [300, 1600, 3700, 5500];
+        var PATH_IDS = ['path1', 'path2', 'path3', 'path4'];
+
+        function startTour() {
+            if (_tourRunning) return;
+            _tourRunning = true;
+            window._tourAutoMove = true;
+
+            /* Reset all paths */
+            ['path1', 'path2', 'path3', 'path4', 'pathEnd'].forEach(function (id) {
+                document.getElementById(id).setAttribute('visible', false);
+            });
+
+            var btn = document.getElementById('tourBtn');
+            btn.disabled = true;
+            btn.textContent = '🚶 Walking to Sai Prasad Room…';
+
+            var cam = document.getElementById('mainCam');
+
+            /* Disable player controls while tour runs */
+            cam.setAttribute('wasd-controls', 'enabled', false);
+            cam.setAttribute('look-controls', 'enabled', false);
+            cam.setAttribute('boundary-check', 'enabled', false); // Disable boundary-check
+
+            /* Snap camera to start position */
+            var wp0 = TOUR_WP[0];
+            cam.setAttribute('position', { x: wp0[1], y: wp0[2], z: wp0[3] });
+            cam.setAttribute('rotation', { x: 0, y: wp0[4], z: 0 });
+
+            /* Reveal path segments in sync with camera */
+            PATH_IDS.forEach(function (id, i) {
+                setTimeout(function () {
+                    document.getElementById(id).setAttribute('visible', true);
+                }, PATH_TIMES[i]);
+            });
+
+            /* ── Animation loop ── */
+            var startTS = null;
+            var lastWP = TOUR_WP[TOUR_WP.length - 1];
+            var totalMs = lastWP[0];
+
+            function animate(ts) {
+                if (!startTS) startTS = ts;
+                var elapsed = ts - startTS;
+
+                /* Arrived? */
+                if (elapsed >= totalMs) {
+                    cam.setAttribute('position', { x: lastWP[1], y: lastWP[2], z: lastWP[3] });
+                    cam.setAttribute('rotation', { x: 0, y: lastWP[4], z: 0 });
+                    document.getElementById('path4').setAttribute('visible', true);
+                    document.getElementById('pathEnd').setAttribute('visible', true);
+                    /* Re-enable controls */
+                    window._tourAutoMove = false;
+                    cam.setAttribute('look-controls', 'enabled', true);
+                    cam.setAttribute('wasd-controls', 'enabled', true);
+                    cam.setAttribute('boundary-check', 'enabled', true); // Re-enable boundary-check
+                    btn.disabled = false;
+                    btn.textContent = '🔄 Walk Again';
+                    _tourRunning = false;
+                    return;
+                }
+
+                /* Find current segment */
+                var seg = 0;
+                for (var i = 0; i < TOUR_WP.length - 1; i++) {
+                    if (elapsed >= TOUR_WP[i][0]) seg = i;
+                }
+                var A = TOUR_WP[seg], B = TOUR_WP[seg + 1];
+                var t = _ease((elapsed - A[0]) / (B[0] - A[0]));
+
+                cam.setAttribute('position', {
+                    x: _lerp(A[1], B[1], t),
+                    y: _lerp(A[2], B[2], t),
+                    z: _lerp(A[3], B[3], t)
+                });
+                cam.setAttribute('rotation', { x: 0, y: _lerp(A[4], B[4], t), z: 0 });
+
+                requestAnimationFrame(animate);
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+    </script>
+
+</body>
+
+</html>
