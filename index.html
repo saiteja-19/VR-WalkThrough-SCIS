@@ -10,18 +10,26 @@
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
     <style>
-        #tourBtn {
+        #btnContainer {
             position: fixed;
             bottom: 32px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 9999;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .tourBtn {
             background: linear-gradient(135deg, #B8860B, #FFD700, #B8860B);
             color: #1a1a2e;
             font-family: 'Segoe UI', sans-serif;
-            font-size: 17px;
+            font-size: 15px;
             font-weight: 800;
-            padding: 14px 36px;
+            padding: 12px 24px;
             border: none;
             border-radius: 50px;
             cursor: pointer;
@@ -29,12 +37,12 @@
             transition: transform 0.15s, box-shadow 0.15s;
         }
 
-        #tourBtn:hover {
-            transform: translateX(-50%) scale(1.06);
+        .tourBtn:hover {
+            transform: scale(1.06);
             box-shadow: 0 10px 36px rgba(255, 215, 0, 0.7);
         }
 
-        #tourBtn:disabled {
+        .tourBtn:disabled {
             background: linear-gradient(135deg, #555, #888);
             color: #ccc;
             cursor: not-allowed;
@@ -60,6 +68,43 @@
     </style>
 
     <script>
+        /* ═══════════════════════════════════════════════════════════════════
+           AVATAR WALK COMPONENT - Animates arms and legs of the avatar
+        ═══════════════════════════════════════════════════════════════════ */
+        AFRAME.registerComponent('avatar-walk', {
+            schema: {
+                speed: { type: 'number', default: 5 },
+                angle: { type: 'number', default: 35 },
+                moving: { type: 'boolean', default: false }
+            },
+            init: function () {
+                this.lArm = this.el.querySelector('#leftArmJoint');
+                this.rArm = this.el.querySelector('#rightArmJoint');
+                this.lLeg = this.el.querySelector('#leftLegJoint');
+                this.rLeg = this.el.querySelector('#rightLegJoint');
+                this.time = 0;
+            },
+            tick: function (time, timeDelta) {
+                if (!this.data.moving) {
+                    if (this.time !== 0) {
+                        this.time = 0;
+                        this.updateJoints(0);
+                    }
+                    return;
+                }
+                this.time += timeDelta;
+                var t = (this.time / 1000) * this.data.speed;
+                var rot = Math.sin(t) * this.data.angle;
+                this.updateJoints(rot);
+            },
+            updateJoints: function (rot) {
+                if (this.lArm) this.lArm.setAttribute('rotation', { x: rot, y: 0, z: 0 });
+                if (this.rArm) this.rArm.setAttribute('rotation', { x: -rot, y: 0, z: 0 });
+                if (this.lLeg) this.lLeg.setAttribute('rotation', { x: -rot, y: 0, z: 0 });
+                if (this.rLeg) this.rLeg.setAttribute('rotation', { x: rot, y: 0, z: 0 });
+            }
+        });
+
         /* ═══════════════════════════════════════════════════════════════════
            BOUNDARY CHECK  –  handles all zones including stairs + upper floor
         ═══════════════════════════════════════════════════════════════════ */
@@ -136,7 +181,11 @@
 <body>
 
     <div id="tourLabel">🏫 College Campus VR Tour</div>
-    <button id="tourBtn" onclick="startTour()">🚪 Walk to Sai Prasad Room</button>
+    <div id="btnContainer">
+        <button class="tourBtn" onclick="startTour('saiprasad')">🚪 Sai Prasad Room</button>
+        <!-- <button class="tourBtn" onclick="startTour('library')">📚 Library</button> -->
+        <button class="tourBtn" onclick="startTour('firstfloor')">🪜 First Floor</button>
+    </div>
 
     <a-scene>
 
@@ -162,6 +211,24 @@
         <a-camera id="mainCam" position="0 1.6 7" wasd-controls look-controls boundary-check>
             <a-cursor color="#FFD700" fuse="false"></a-cursor>
         </a-camera>
+
+        <!-- ======= AVATAR GUIDE ======= -->
+        <a-entity id="guideAvatar" position="0 0 5.0" avatar-walk="moving: false">
+            <a-sphere id="head" position="0 1.6 0" radius="0.15" color="#FFE0BD"></a-sphere>
+            <a-box id="body" position="0 1.1 0" width="0.4" height="0.6" depth="0.2" color="#2C3E50"></a-box>
+            <a-entity id="leftArmJoint" position="-0.27 1.35 0">
+                <a-cylinder position="0 -0.25 0" radius="0.04" height="0.5" color="#FFE0BD"></a-cylinder>
+            </a-entity>
+            <a-entity id="rightArmJoint" position="0.27 1.35 0">
+                <a-cylinder position="0 -0.25 0" radius="0.04" height="0.5" color="#FFE0BD"></a-cylinder>
+            </a-entity>
+            <a-entity id="leftLegJoint" position="-0.12 0.8 0">
+                <a-cylinder position="0 -0.4 0" radius="0.05" height="0.8" color="#34495E"></a-cylinder>
+            </a-entity>
+            <a-entity id="rightLegJoint" position="0.12 0.8 0">
+                <a-cylinder position="0 -0.4 0" radius="0.05" height="0.8" color="#34495E"></a-cylinder>
+            </a-entity>
+        </a-entity>
 
         <!-- ======= LIGHTING ======= -->
         <a-light type="ambient" color="#fff" intensity="0.9"></a-light>
@@ -333,6 +400,11 @@
             <a-text value="Prof. Sai Prasad" align="center" color="#FFD700" width="3.8" position="0 0 0.02"></a-text>
         </a-plane>
 
+        <!-- Library nameplate: floats in front of right corridor wall (~x=12) -->
+        <a-plane position="12 3.8 -4.85" width="2.2" height="0.55" color="#1a1a2e" material="shader:flat; side:double">
+            <a-text value="Library" align="center" color="#FFD700" width="3.8" position="0 0 0.02"></a-text>
+        </a-plane>
+
 
         <a-sky color="#87CEEB"></a-sky>
     </a-scene>
@@ -350,59 +422,82 @@
         function _lerp(a, b, t) { return a + (b - a) * t; }
         function _ease(t) { return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; }
 
-        /*  Waypoints: [ timeMs, x, y, z, rotY ]
-            rotY: 0 = face -Z (forward into room)
-                  90 = face -X (left / into left corridor)
-        */
-        var TOUR_WP = [
-            [0, 0, 1.6, 5.0, 0],  // gate start, facing into room
-            [1400, 0, 1.6, -2.5, 0],  // walked to left-turn junction
-            [2200, 0, 1.6, -2.5, 90],  // turned left
-            [3000, -5, 1.6, -2.5, 90],  // at corridor opening
-            [4200, -8, 1.6, -2.5, 90],  // walked to first door position (x=-8)
-            [4900, -8, 1.6, -2.5, 0],  // turned to face right wall (lc-right texture)
-        ];
+        var ROUTES = {
+            'saiprasad': {
+                name: 'Sai Prasad Room',
+                waypoints: [
+                    [0, 0, 1.6, 5.0, 0],
+                    [1400, 0, 1.6, -2.5, 0],
+                    [2200, 0, 1.6, -2.5, 90],
+                    [3000, -5, 1.6, -2.5, 90],
+                    [4200, -8, 1.6, -2.5, 90],
+                    [4900, -8, 1.6, -2.5, 0]
+                ]
+            },
+            'library': {
+                name: 'Library',
+                waypoints: [
+                    [0, 0, 1.6, 5.0, 0],
+                    [1400, 0, 1.6, -2.5, 0],
+                    [2200, 0, 1.6, -2.5, -90],
+                    [3000, 5, 1.6, -2.5, -90],
+                    [4200, 12, 1.6, -2.5, -90],
+                    [4900, 12, 1.6, -2.5, 0]
+                ]
+            },
+            'firstfloor': {
+                name: 'First Floor',
+                waypoints: [
+                    [0, 0, 1.6, 5.0, 0],
+                    [1000, 0, 1.6, 1.0, 0],
+                    [1600, 0, 1.6, 1.0, -90],
+                    [2200, 3.5, 1.6, 1.0, -90],
+                    [2800, 3.5, 1.6, -1.0, 0],
+                    [4500, 3.5, 4.0, -5.5, 0],
+                    [5300, 0, 4.0, -6.5, 90],
+                    [5800, 0, 4.0, -6.5, 0]
+                ]
+            }
+        };
 
-        /* Path-segment reveal times (ms) */
-        var PATH_TIMES = [300, 1600, 3700, 5500];
-        var PATH_IDS = ['path1', 'path2', 'path3', 'path4'];
-
-        function startTour() {
+        function startTour(roomKey) {
             if (_tourRunning) return;
             _tourRunning = true;
             window._tourAutoMove = true;
+            var route = ROUTES[roomKey];
+            var ACTIVE_TOUR_WP = route.waypoints;
 
-            /* Reset all paths */
+            /* Hide old floor paths just in case */
             ['path1', 'path2', 'path3', 'path4', 'pathEnd'].forEach(function (id) {
-                document.getElementById(id).setAttribute('visible', false);
+                var el = document.getElementById(id);
+                if (el) el.setAttribute('visible', false);
             });
 
-            var btn = document.getElementById('tourBtn');
-            btn.disabled = true;
-            btn.textContent = '🚶 Walking to Sai Prasad Room…';
+            var btns = document.querySelectorAll('.tourBtn');
+            btns.forEach(function (b) { b.disabled = true; });
 
             var cam = document.getElementById('mainCam');
 
             /* Disable player controls while tour runs */
             cam.setAttribute('wasd-controls', 'enabled', false);
             cam.setAttribute('look-controls', 'enabled', false);
-            cam.setAttribute('boundary-check', 'enabled', false); // Disable boundary-check
+            cam.setAttribute('boundary-check', 'enabled', false);
 
-            /* Snap camera to start position */
-            var wp0 = TOUR_WP[0];
-            cam.setAttribute('position', { x: wp0[1], y: wp0[2], z: wp0[3] });
+            /* Snap camera and avatar to start position */
+            var wp0 = ACTIVE_TOUR_WP[0];
+            var avatar = document.getElementById('guideAvatar');
+            avatar.setAttribute('position', { x: wp0[1], y: 0, z: wp0[3] });
+            avatar.setAttribute('rotation', { x: 0, y: wp0[4], z: 0 });
+            avatar.setAttribute('avatar-walk', 'moving', true);
+
+            var camX = wp0[1] + Math.sin(wp0[4] * Math.PI / 180) * 1.8;
+            var camZ = wp0[3] + Math.cos(wp0[4] * Math.PI / 180) * 1.8;
+            cam.setAttribute('position', { x: camX, y: wp0[2], z: camZ });
             cam.setAttribute('rotation', { x: 0, y: wp0[4], z: 0 });
-
-            /* Reveal path segments in sync with camera */
-            PATH_IDS.forEach(function (id, i) {
-                setTimeout(function () {
-                    document.getElementById(id).setAttribute('visible', true);
-                }, PATH_TIMES[i]);
-            });
 
             /* ── Animation loop ── */
             var startTS = null;
-            var lastWP = TOUR_WP[TOUR_WP.length - 1];
+            var lastWP = ACTIVE_TOUR_WP[ACTIVE_TOUR_WP.length - 1];
             var totalMs = lastWP[0];
 
             function animate(ts) {
@@ -411,35 +506,53 @@
 
                 /* Arrived? */
                 if (elapsed >= totalMs) {
-                    cam.setAttribute('position', { x: lastWP[1], y: lastWP[2], z: lastWP[3] });
-                    cam.setAttribute('rotation', { x: 0, y: lastWP[4], z: 0 });
-                    document.getElementById('path4').setAttribute('visible', true);
-                    document.getElementById('pathEnd').setAttribute('visible', true);
+                    var endX = lastWP[1], endY = lastWP[2], endZ = lastWP[3], endRotY = lastWP[4];
+                    avatar.setAttribute('position', { x: endX, y: 0, z: endZ });
+                    avatar.setAttribute('rotation', { x: 0, y: endRotY, z: 0 });
+                    avatar.setAttribute('avatar-walk', 'moving', false);
+
+                    var finalCamX = endX + Math.sin(endRotY * Math.PI / 180) * 1.8;
+                    var finalCamZ = endZ + Math.cos(endRotY * Math.PI / 180) * 1.8;
+                    cam.setAttribute('position', { x: finalCamX, y: endY, z: finalCamZ });
+                    cam.setAttribute('rotation', { x: 0, y: endRotY, z: 0 });
+
+                    if (roomKey === 'saiprasad') {
+                        var p4 = document.getElementById('path4');
+                        var pE = document.getElementById('pathEnd');
+                        if (p4) p4.setAttribute('visible', true);
+                        if (pE) pE.setAttribute('visible', true);
+                    }
+
                     /* Re-enable controls */
                     window._tourAutoMove = false;
                     cam.setAttribute('look-controls', 'enabled', true);
                     cam.setAttribute('wasd-controls', 'enabled', true);
-                    cam.setAttribute('boundary-check', 'enabled', true); // Re-enable boundary-check
-                    btn.disabled = false;
-                    btn.textContent = '🔄 Walk Again';
+                    cam.setAttribute('boundary-check', 'enabled', true);
+                    btns.forEach(function (b) { b.disabled = false; });
                     _tourRunning = false;
                     return;
                 }
 
                 /* Find current segment */
                 var seg = 0;
-                for (var i = 0; i < TOUR_WP.length - 1; i++) {
-                    if (elapsed >= TOUR_WP[i][0]) seg = i;
+                for (var i = 0; i < ACTIVE_TOUR_WP.length - 1; i++) {
+                    if (elapsed >= ACTIVE_TOUR_WP[i][0]) seg = i;
                 }
-                var A = TOUR_WP[seg], B = TOUR_WP[seg + 1];
+                var A = ACTIVE_TOUR_WP[seg], B = ACTIVE_TOUR_WP[seg + 1];
                 var t = _ease((elapsed - A[0]) / (B[0] - A[0]));
 
-                cam.setAttribute('position', {
-                    x: _lerp(A[1], B[1], t),
-                    y: _lerp(A[2], B[2], t),
-                    z: _lerp(A[3], B[3], t)
-                });
-                cam.setAttribute('rotation', { x: 0, y: _lerp(A[4], B[4], t), z: 0 });
+                var curX = _lerp(A[1], B[1], t);
+                var curY = _lerp(A[2], B[2], t);
+                var curZ = _lerp(A[3], B[3], t);
+                var curRotY = _lerp(A[4], B[4], t);
+
+                avatar.setAttribute('position', { x: curX, y: 0, z: curZ });
+                avatar.setAttribute('rotation', { x: 0, y: curRotY, z: 0 });
+
+                var camXPos = curX + Math.sin(curRotY * Math.PI / 180) * 1.8;
+                var camZPos = curZ + Math.cos(curRotY * Math.PI / 180) * 1.8;
+                cam.setAttribute('position', { x: camXPos, y: curY, z: camZPos });
+                cam.setAttribute('rotation', { x: 0, y: curRotY, z: 0 });
 
                 requestAnimationFrame(animate);
             }
